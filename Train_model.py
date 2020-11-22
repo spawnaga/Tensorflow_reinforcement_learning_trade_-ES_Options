@@ -137,7 +137,7 @@ class get_data:
         ES = Future(symbol='ES', lastTradeDateOrContractMonth='20201218', exchange='GLOBEX',
                     currency='USD')
         ib.qualifyContracts(ES)
-        ES_df = ib.reqHistoricalData(contract=ES, endDateTime=endDateTime, durationStr='3 D',
+        ES_df = ib.reqHistoricalData(contract=ES, endDateTime=endDateTime, durationStr=No_days,
                                      barSizeSetting=interval, whatToShow='TRADES', useRTH=False)
         ES_df = util.df(ES_df)
         ES_df.set_index('date', inplace=True)
@@ -174,7 +174,7 @@ class get_data:
         ES_df = renko_df(ES_df, 1.5)
         return ES_df
 
-        df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr='3 D',
+        df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr=No_days,
                                                        barSizeSetting=interval, whatToShow='MIDPOINT', useRTH=False,
                                                        keepUpToDate=False))[['date', 'close']])
         df.columns = ['date', f"{contract.symbol}_{contract.right}_close"]
@@ -536,7 +536,7 @@ if __name__ == '__main__':
     # config
     models_folder = f'{path}/rl_trader_models_Sup/1_layer_BO_RSI_ATR_Close'  # where models and scaler are saved
     rewards_folder = f'{path}/rl_trader_rewards_Sup/1_layer_BO_RSI_ATR_Close'  # where results are saved
-    num_episodes = 1000  # number of loops per a cycle
+    num_episodes = 10  # number of loops per a cycle
 
     initial_investment = 4000
 
@@ -546,96 +546,95 @@ if __name__ == '__main__':
     res = get_data()
     use = 'train'  # define the use for the code train or test
     succeded_trades = 0  # To count percentage of success
-    try:
-
-
-        ib = IB()
-        ib.connect('127.0.0.1', 7497, clientId=np.random.randint(10, 1000))
-        ES = Future(symbol='ES', lastTradeDateOrContractMonth='20201218', exchange='GLOBEX',
-                    currency='USD')
-        ib.qualifyContracts(ES)
-        endDateTime = ''
-        No_days = '10 D'
-        interval = '1 min'
-        data_raw = res.options(res.options(res.ES(), res.option_history(res.get_contract('C', 2000))) \
-                               , res.option_history(
-                res.get_contract('P', 2000)))  # collect live data of ES with TA and options prices
-        data_raw.to_csv('./new_data.csv')  # save data incase tws goes dowen
-    except:
-        data_raw = pd.read_csv('./new_data.csv', index_col='date')
-
-    data = data_raw[['obv_slope', 'bar_num', 'RSI', 'EMA_9-EMA_26', 'ES_C_close',
-                     'ES_P_close']]  # choose parameters to drop if not needed
-    n_stocks = 2
-    train_data = data
-    batch_size = 32
-    env = MultiStockEnv(train_data, initial_investment)  # start envirnoment
-    state_size = env.state_dim
-    action_size = len(env.action_space)
-    agent = DQNAgent(state_size, action_size)
-    scaler = get_scaler(env)
-
-    try:
-        agent.load(f'{models_folder}/dqn.h5')  # load agent
-        with open(f'{rewards_folder}/scaler.pkl', 'rb') as f:
-            scaler = pickle.load(f)  # load scaler  # load scaler
-    except Exception as error:
-        print(error)
-    # store the final value of the portfolio (end of episode)
-    portfolio_value = []
-
-    if use == 'train':
+    while True:
         try:
-            for e in range(num_episodes):
-                t0 = datetime.now()
-                val = play_one_episode(agent, env)
-                dt = datetime.now() - t0
-                print(f"episode: {e + 1}/{num_episodes}, episode end value: {val:.2f}, duration: {dt}")
-                portfolio_value.append(val)  # append episode end portfolio value
-
-            print(
-                f'*****Loop finished, No. of succeded trades = {succeded_trades}, percentage = {succeded_trades / num_episodes * 100}%')
-            agent.save(f'{models_folder}/dqn.h5')
-
-            # save the scaler
-            with open(f'{rewards_folder}/scaler.pkl', 'wb') as f:
-                pickle.dump(scaler, f)
-                f.close()
-
-            # save portfolio value for each episode
-
-            np.save(f'{rewards_folder}/reward.npy', np.array(portfolio_value))
-            np.save(f'{rewards_folder}/succeded_trades.npy', np.array(succeded_trades))
-            np.save(f'{rewards_folder}/succeded_trades.npy', np.array(agent.random_trades))
-        except KeyboardInterrupt:
-            print(
-                f'*****Loop finished, No. of succeded trades = {succeded_trades}, percentage = {succeded_trades / (e + 1) * 100}%')
-            agent.save(f'{models_folder}/dqn.h5')
-
-            # save the scaler
-            with open(f'{rewards_folder}/scaler.pkl', 'wb') as f:
-                pickle.dump(scaler, f)
-                f.close()
-
-            # save portfolio value for each episode
-
-            np.save(f'{rewards_folder}/reward.npy', np.array(portfolio_value))
-            np.save(f'{rewards_folder}/succeded_trades.npy', np.array(succeded_trades))
-            np.save(f'{rewards_folder}/succeded_trades.npy', np.array(agent.random_trades))
-
+            ib = IB()
+            ib.connect('127.0.0.1', 7497, clientId=np.random.randint(10, 1000))
+            ES = Future(symbol='ES', lastTradeDateOrContractMonth='20201218', exchange='GLOBEX',
+                        currency='USD')
+            ib.qualifyContracts(ES)
+            endDateTime = ''
+            No_days = '10 D'
+            interval = '1 min'
+            data_raw = res.options(res.options(res.ES(), res.option_history(res.get_contract('C', 2000))) \
+                                   , res.option_history(
+                    res.get_contract('P', 2000)))  # collect live data of ES with TA and options prices
+            data_raw.to_csv('./new_data.csv')  # save data incase tws goes dowen
+        except:
+            data_raw = pd.read_csv('./new_data.csv', index_col='date')
+    
+        data = data_raw[['obv_slope', 'bar_num', 'RSI', 'EMA_9-EMA_26', 'ES_C_close',
+                         'ES_P_close']]  # choose parameters to drop if not needed
+        n_stocks = 2
+        train_data = data
+        batch_size = 32
+        env = MultiStockEnv(train_data, initial_investment)  # start envirnoment
+        state_size = env.state_dim
+        action_size = len(env.action_space)
+        agent = DQNAgent(state_size, action_size)
+        scaler = get_scaler(env)
+    
+        try:
+            agent.load(f'{models_folder}/dqn.h5')  # load agent
+            with open(f'{rewards_folder}/scaler.pkl', 'rb') as f:
+                scaler = pickle.load(f)  # load scaler  # load scaler
         except Exception as error:
-            print("UNEXPECTED EXCEPTION")
             print(error)
-
-    else:
-        agent.epsilon = 0.0001
-        t0 = datetime.now()
-        val = test_trade(agent, env)
-        dt = datetime.now() - t0
-        print(f'final value={val}')
-
-
-
-
-
-
+        # store the final value of the portfolio (end of episode)
+        portfolio_value = []
+    
+        if use == 'train':
+            try:
+                for e in range(num_episodes):
+                    t0 = datetime.now()
+                    val = play_one_episode(agent, env)
+                    dt = datetime.now() - t0
+                    print(f"episode: {e + 1}/{num_episodes}, episode end value: {val:.2f}, duration: {dt}")
+                    portfolio_value.append(val)  # append episode end portfolio value
+    
+                print(
+                    f'*****Loop finished, No. of succeded trades = {succeded_trades}, percentage = {succeded_trades / num_episodes * 100}%')
+                agent.save(f'{models_folder}/dqn.h5')
+    
+                # save the scaler
+                with open(f'{rewards_folder}/scaler.pkl', 'wb') as f:
+                    pickle.dump(scaler, f)
+                    f.close()
+    
+                # save portfolio value for each episode
+    
+                np.save(f'{rewards_folder}/reward.npy', np.array(portfolio_value))
+                np.save(f'{rewards_folder}/succeded_trades.npy', np.array(succeded_trades))
+                np.save(f'{rewards_folder}/succeded_trades.npy', np.array(agent.random_trades))
+            except KeyboardInterrupt:
+                print(
+                    f'*****Loop finished, No. of succeded trades = {succeded_trades}, percentage = {succeded_trades / (e + 1) * 100}%')
+                agent.save(f'{models_folder}/dqn.h5')
+    
+                # save the scaler
+                with open(f'{rewards_folder}/scaler.pkl', 'wb') as f:
+                    pickle.dump(scaler, f)
+                    f.close()
+    
+                # save portfolio value for each episode
+    
+                np.save(f'{rewards_folder}/reward.npy', np.array(portfolio_value))
+                np.save(f'{rewards_folder}/succeded_trades.npy', np.array(succeded_trades))
+                np.save(f'{rewards_folder}/succeded_trades.npy', np.array(agent.random_trades))
+    
+            except Exception as error:
+                print("UNEXPECTED EXCEPTION")
+                print(error)
+    
+        else:
+            agent.epsilon = 0.0001
+            t0 = datetime.now()
+            val = test_trade(agent, env)
+            dt = datetime.now() - t0
+            print(f'final value={val}')
+    
+    
+    
+    
+    
+    
