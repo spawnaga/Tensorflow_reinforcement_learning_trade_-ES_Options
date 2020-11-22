@@ -25,6 +25,14 @@ from ressup import ressup
 from ib_insync import util
 import tensorflow as tf
 import nest_asyncio
+from ib_insync import *
+import talib as ta
+from talib import MA_Type
+from tensorflow.compat.v1 import ConfigProto
+from tensorflow.compat.v1 import InteractiveSession
+
+
+
 nest_asyncio.apply()
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -33,8 +41,7 @@ if gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
     except RuntimeError as e:
         print(e)
-from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
+
 
 config = ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.2
@@ -42,6 +49,46 @@ config.gpu_options.allow_growth = True
 session = InteractiveSession(config=config)
 # util.startLoop()
 
+
+def slope(ser, n):
+    "function to calculate the slope of n consecutive points on a plot"
+    slopes = [i * 0 for i in range(n - 1)]
+    for i in range(n, len(ser) + 1):
+        y = ser[i - n:i]
+        x = np.array(range(n))
+        y_scaled = (y - y.min()) / (y.max() - y.min())
+        x_scaled = (x - x.min()) / (x.max() - x.min())
+        x_scaled = sm.add_constant(x_scaled)
+        model = sm.OLS(y_scaled, x_scaled)
+        results = model.fit()
+        slopes.append(results.params[-1])
+    slope_angle = (np.rad2deg(np.arctan(np.array(slopes))))
+    return np.array(slope_angle)
+
+
+def renko_df(df_raw, ATR):
+    df_raw = df_raw[-500:]
+    df_raw.reset_index(inplace=True)
+
+    renko = Renko(df_raw[['date', 'open', 'high', 'low', 'close', 'volume']])
+
+    renko.brick_size = ATR
+
+    df = renko.get_ohlc_data()
+    df = df.copy()
+    df['bar_num'] = np.where(df['uptrend'] == True, 1, np.where(df['uptrend'] == False, -1, 0))
+
+    for i in range(1, len(df["bar_num"])):
+        if df["bar_num"][i] > 0 and df["bar_num"][i - 1] > 0:
+            df["bar_num"][i] += df["bar_num"][i - 1]
+        elif df["bar_num"][i] < 0 and df["bar_num"][i - 1] < 0:
+            df["bar_num"][i] += df["bar_num"][i - 1]
+    df.drop_duplicates(subset="date", keep="last", inplace=True)
+    df_raw = df_raw.merge(df.loc[:, ["date", "bar_num"]], how="outer", on="date")
+    df_raw["bar_num"].fillna(method='ffill', inplace=True)
+    df_raw['OBV'] = ta.OBV(df_raw['close'], df_raw['volume'])
+    df_raw["obv_slope"] = slope(df_raw['OBV'], 5)
+    return df_raw
 
 class get_data:
 
@@ -87,43 +134,45 @@ class get_data:
             else:
                 return contract
 
-    def res_sup(self,ES_df):
-        ES_df = ES_df.reset_index(drop=True)
-        ressupDF = ressup(ES_df, len(ES_df))
-        res = ressupDF['Resistance'].values
-        sup = ressupDF['Support'].values
-        return res, sup
-
-    def ES(self,ES):
-        
-        ES_df = util.df(ES)
-        ES_df.set_index('date',inplace=True)
+    def ES(self):
+        ES = Future(symbol='ES', lastTradeDateOrContractMonth='20201218', exchange='GLOBEX',
+                    currency='USD')
+        ib.qualifyContracts(ES)
+        ES_df = ib.reqHistoricalData(contract=ES, endDateTime=endDateTime, durationStr=No_days,
+                                     barSizeSetting=interval, whatToShow='TRADES', useRTH=False)
+        ES_df = util.df(ES_df)
+        ES_df.set_index('date', inplace=True)
         ES_df.index = pd.to_datetime(ES_df.index)
-        ES_df['hours'] = ES_df.index.strftime('%H').astype(int)
-        ES_df['minutes'] = ES_df.index.strftime('%M').astype(int)
-        ES_df['hours + minutes'] = ES_df['hours']*100 + ES_df['minutes']
-        ES_df['Day_of_week'] = ES_df.index.dayofweek
-        ES_df['Resistance'], ES_df['Support'] = self.res_sup(ES_df)
-        ES_df['RSI'] = ta.RSI(ES_df['close'])
-        ES_df['macd'],ES_df['macdsignal'],ES_df['macdhist'] = ta.MACD(ES_df['close'], fastperiod=12, slowperiod=26, signalperiod=9)
-        ES_df['macd - macdsignal'] = ES_df['macd'] - ES_df['macdsignal']
-        ES_df['MA_9']=ta.MA(ES_df['close'], timeperiod=9)
-        ES_df['MA_21']=ta.MA(ES_df['close'], timeperiod=21)
-        ES_df['MA_200']=ta.MA(ES_df['close'], timeperiod=200)
-        ES_df['EMA_9']=ta.EMA(ES_df['close'], timeperiod=9)
-        ES_df['EMA_21']=ta.EMA(ES_df['close'], timeperiod=21)
-        ES_df['EMA_50']=ta.EMA(ES_df['close'], timeperiod=50)
-        ES_df['EMA_200']=ta.EMA(ES_df['close'], timeperiod=200)
-        ES_df['ATR']=ta.ATR(ES_df['high'],ES_df['low'], ES_df['close'])
-        ES_df['roll_max_cp']=ES_df['high'].rolling(20).max()
-        ES_df['roll_min_cp']=ES_df['low'].rolling(20).min()
-        ES_df['roll_max_vol']=ES_df['volume'].rolling(20).max()
-        ES_df['vol/max_vol'] = ES_df['volume']/ES_df['roll_max_vol']
-        ES_df['EMA_21-EMA_9']=ES_df['EMA_21']-ES_df['EMA_9']
-        ES_df['EMA_200-EMA_50']=ES_df['EMA_200']-ES_df['EMA_50']
-        ES_df['B_upper'], ES_df['B_middle'], ES_df['B_lower'] = ta.BBANDS(ES_df['close'], matype=MA_Type.T3)
-        ES_df.dropna(inplace = True)
-        
+        # ES_df['hours'] = ES_df.index.strftime('%H').astype(int)
+        # ES_df['minutes'] = ES_df.index.strftime('%M').astype(int)
+        # ES_df['hours + minutes'] = ES_df['hours'] * 100 + ES_df['minutes']
+        # ES_df['Day_of_week'] = ES_df.index.dayofweek
+        ES_df['RSI'] = ta.RSI(ES_df['close'], timeperiod=5)
+        # ES_df['macd'], ES_df['macdsignal'], ES_df['macdhist'] = ta.MACD(ES_df['close'], fastperiod=12, slowperiod=26,
+        #                                                                 signalperiod=9)
+        # ES_df['macd - macdsignal'] = ES_df['macd'] - ES_df['macdsignal']
+        ES_df['MA_9'] = ta.MA(ES_df['close'], timeperiod=9)
+        ES_df['MA_21'] = ta.MA(ES_df['close'], timeperiod=21)
+        # ES_df['MA_200'] = ta.MA(ES_df['close'], timeperiod=200)
+        # ES_df['EMA_9'] = ta.EMA(ES_df['close'], timeperiod=9)
+        # ES_df['EMA_26'] = ta.EMA(ES_df['close'], timeperiod=26)
+        # ES_df['derv_1'] = np.gradient(ES_df['EMA_9'])
+        # ES_df['EMA_9_26'] = ES_df['EMA_9'] / ES_df['EMA_26']
+        # ES_df['EMA_50'] = ta.EMA(ES_df['close'], timeperiod=50)
+        # ES_df['EMA_200'] = ta.EMA(ES_df['close'], timeperiod=200)
+        ES_df['ATR'] = ta.ATR(ES_df['high'], ES_df['low'], ES_df['close'], timeperiod=20)
+        # ES_df['roll_max_cp'] = ES_df['high'].rolling(20).max()
+        # ES_df['roll_min_cp'] = ES_df['low'].rolling(20).min()
+        # ES_df['Mean_ATR'] = (ta.ATR(ES_df['high'], ES_df['low'], ES_df['close'], 21)).mean()
+        ES_df['roll_max_vol'] = ES_df['volume'].rolling(20).max()
+        # ES_df['vol/max_vol'] = ES_df['volume'] / ES_df['roll_max_vol']
+        ES_df['EMA_9-EMA_26'] = ES_df['EMA_9'] - ES_df['EMA_26']
+        # ES_df['EMA_200-EMA_50'] = ES_df['EMA_200'] - ES_df['EMA_50']
+
+        # ES_df['B_upper'], ES_df['B_middle'], ES_df['B_lower'] = ta.BBANDS(ES_df['close'], timeperiod=6, nbdevup=1,
+        #                                                                   nbdevdn=1, matype=MA_Type.T3)
+        ES_df.dropna(inplace=True)
+        ES_df = renko_df(ES_df, 1.5)
         return ES_df
 
     def option_history(self, contract):
@@ -137,31 +186,26 @@ class get_data:
     def options(self, df1=None,df2=None):
         return df1
 
-def mlp(input_dim, n_action, n_hidden_layers=1, hidden_dim=5):
+def mlp(input_dim, n_action, n_hidden_layers=1, hidden_dim=32):
     """ A multi-layer perceptron """
-     
+
     # input layer
-    i = Input(shape=(input_dim,1))
+    i = Input(shape=(input_dim,))
     x = i
-     
+
     # hidden layers
     for _ in range(n_hidden_layers):
-      # x = Dropout(0.2)(x)
-      # x = LSTM(hidden_dim, return_sequences = True)(x)
-      x = Dense(hidden_dim, activation='relu')(x)
-     
-    x = GlobalAveragePooling1D()(x)
+        x = Dense(hidden_dim, activation='relu')(x)
+
     # final layer
-    # x = Dense(n_action, activation='relu')(x)
-    x = Dense(n_action, activation='softmax')(x)
+    x = Dense(n_action)(x)
+
     # make the model
     model = Model(i, x)
-     
-    model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+    model.compile(loss='mse', optimizer='adam')
     print((model.summary()))
     return model
-
-
 
 
 
@@ -176,9 +220,6 @@ def _get_obs(stock_owned, stock_price, cash_in_hand):
     obs[4] = cash_in_hand
     obs[5:] = data[:-2]
     return obs, stock_price, cash_in_hand
-
-
-
 
 
     
@@ -248,7 +289,8 @@ def trade(ES, hasNewBar=None):
     options_array = np.array([call_contract_price, put_contract_price])
 
     data_raw = res.options(res.options(res.ES(ES)))
-    data = data_raw[['Day_of_week', 'hours + minutes', 'EMA_21-EMA_9', 'EMA_200-EMA_50', 'RSI', 'ATR','macd - macdsignal','macdhist', 'vol/max_vol']].iloc[-1,:].values
+    data = data_raw[['obv_slope', 'bar_num', 'RSI', 'EMA_9_26', 'ES_C_close',
+                     'ES_P_close']]  # choose parameters to drop if not needed
 
     data = np.append(data,options_array,axis=0)
     #choose parameters to drop if not needed
@@ -266,13 +308,6 @@ def trade(ES, hasNewBar=None):
       elif a == 2:
         buy_index.append(i)
 
-    if data_raw["low"].iloc[-1] < data_raw["close"].iloc[-2] - (2 *  data_raw["ATR"].iloc[-2]) and len(ib.positions())!=0 and len(ib.reqAllOpenOrders())==0 and sell_index==[]:
-        sell_index.append(0)
-
-    
-    elif data_raw["high"].iloc[-1] > data_raw["close"].iloc[-2] + (2 * data_raw["ATR"].iloc[-2]) and len(ib.positions())!=0 and len(ib.reqAllOpenOrders())==0 and sell_index==[]:
-        sell_index.append(1)
-    
     if sell_index:
         for i in sell_index:
             if not stock_owned[i] == 0:
@@ -329,9 +364,6 @@ if __name__ == "__main__":
     global call_option_price
     global put_option_price
     global stock_owned
-    from ib_insync import *
-    import talib as ta
-    from talib import MA_Type
 
     ib = IB()
     ib.disconnect()
@@ -371,8 +403,3 @@ if __name__ == "__main__":
     
     while ib.waitOnUpdate():
         ES.updateEvent += trade
-
-
-    # print('passed to util')
-    # now = datetime.now()
-    # ES.updateEvent += trade in ib.timeRange(start=datetime(now.year,now.month,now.day,15,0,00), end=datetime(now.year,now.month,now.day+1,14,0,00),step=60)
