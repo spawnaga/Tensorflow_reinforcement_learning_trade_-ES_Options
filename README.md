@@ -7,7 +7,7 @@ Problem : create an AI to trade successfuly with rewards the ES Ftures using Rei
 
 Given: ES 1 min OHLCV chart
 
-Method: by using Talib library in python, we will create technicals and train the agent on. In my trials, I will use OBV, OBV slop in 5 min, RSI, EMA 9 - EMA 26 difference value.
+Method: by using Talib library in python, we will create technicals and train the agent on them. In my work, I will use OBV, OBV slope for 5 min interval, RSI, EMA 9 - EMA 26 difference value.
 
 Tools: interactive brokers (TWS/IB GATEWAY) as a broker to collect OHLCV chart and python (I will use PyCharm platform)
 
