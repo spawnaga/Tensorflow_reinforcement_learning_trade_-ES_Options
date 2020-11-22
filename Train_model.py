@@ -547,7 +547,7 @@ if __name__ == '__main__':
                     currency='USD')
         ib.qualifyContracts(ES)
         endDateTime = ''
-        No_days = '25 D'
+        No_days = '250 D'
         interval = '1 min'
         data_raw = res.options(res.options(res.ES(), res.option_history(res.get_contract('C', 2000))) \
                                , res.option_history(
