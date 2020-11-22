@@ -195,6 +195,7 @@ class get_data:
 ### The experience replay memory ###
 
 
+
 def get_scaler(env):
     # return scikit-learn scaler object to scale the states
     # Note: you could also populate the replay buffer here
