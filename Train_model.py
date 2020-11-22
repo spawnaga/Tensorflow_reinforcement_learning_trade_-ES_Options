@@ -150,11 +150,11 @@ class get_data:
         # ES_df['macd'], ES_df['macdsignal'], ES_df['macdhist'] = ta.MACD(ES_df['close'], fastperiod=12, slowperiod=26,
         #                                                                 signalperiod=9)
         # ES_df['macd - macdsignal'] = ES_df['macd'] - ES_df['macdsignal']
-        ES_df['MA_9'] = ta.MA(ES_df['close'], timeperiod=9)
-        ES_df['MA_21'] = ta.MA(ES_df['close'], timeperiod=21)
+        # ES_df['MA_9'] = ta.MA(ES_df['close'], timeperiod=9)
+        # ES_df['MA_21'] = ta.MA(ES_df['close'], timeperiod=21)
         # ES_df['MA_200'] = ta.MA(ES_df['close'], timeperiod=200)
-        # ES_df['EMA_9'] = ta.EMA(ES_df['close'], timeperiod=9)
-        # ES_df['EMA_26'] = ta.EMA(ES_df['close'], timeperiod=26)
+        ES_df['EMA_9'] = ta.EMA(ES_df['close'], timeperiod=9)
+        ES_df['EMA_26'] = ta.EMA(ES_df['close'], timeperiod=26)
         # ES_df['derv_1'] = np.gradient(ES_df['EMA_9'])
         # ES_df['EMA_9_26'] = ES_df['EMA_9'] / ES_df['EMA_26']
         # ES_df['EMA_50'] = ta.EMA(ES_df['close'], timeperiod=50)
@@ -174,7 +174,6 @@ class get_data:
         ES_df = renko_df(ES_df, 1.5)
         return ES_df
 
-    def option_history(self, contract):
         df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr=No_days,
                                                        barSizeSetting=interval, whatToShow='MIDPOINT', useRTH=False,
                                                        keepUpToDate=False))[['date', 'close']])
@@ -547,7 +546,7 @@ if __name__ == '__main__':
                     currency='USD')
         ib.qualifyContracts(ES)
         endDateTime = ''
-        No_days = '5 D'
+        No_days = '15 D'
         interval = '1 min'
         data_raw = res.options(res.options(res.ES(), res.option_history(res.get_contract('C', 2000))) \
                                , res.option_history(
@@ -556,7 +555,7 @@ if __name__ == '__main__':
     except:
         data_raw = pd.read_csv('./new_data.csv', index_col='date')
 
-    data = data_raw[['obv_slope', 'bar_num', 'RSI', 'EMA_9_26', 'ES_C_close',
+    data = data_raw[['obv_slope', 'bar_num', 'RSI', 'EMA_9-EMA_26', 'ES_C_close',
                      'ES_P_close']]  # choose parameters to drop if not needed
     n_stocks = 2
     train_data = data
