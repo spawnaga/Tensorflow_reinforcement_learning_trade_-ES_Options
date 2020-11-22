@@ -137,7 +137,7 @@ class get_data:
         ES = Future(symbol='ES', lastTradeDateOrContractMonth='20201218', exchange='GLOBEX',
                     currency='USD')
         ib.qualifyContracts(ES)
-        ES_df = ib.reqHistoricalData(contract=ES, endDateTime=endDateTime, durationStr=No_days,
+        ES_df = ib.reqHistoricalData(contract=ES, endDateTime=endDateTime, durationStr='3 D',
                                      barSizeSetting=interval, whatToShow='TRADES', useRTH=False)
         ES_df = util.df(ES_df)
         ES_df.set_index('date', inplace=True)
@@ -174,7 +174,7 @@ class get_data:
         ES_df = renko_df(ES_df, 1.5)
         return ES_df
 
-        df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr=No_days,
+        df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr='3 D',
                                                        barSizeSetting=interval, whatToShow='MIDPOINT', useRTH=False,
                                                        keepUpToDate=False))[['date', 'close']])
         df.columns = ['date', f"{contract.symbol}_{contract.right}_close"]
@@ -183,6 +183,14 @@ class get_data:
 
     def options(self, df1, df2):
         return pd.merge(df1, df2, on='date', how='outer').dropna()
+    
+    def option_history(self, contract):
+        df = pd.DataFrame(util.df(ib.reqHistoricalData(contract=contract, endDateTime=endDateTime, durationStr=No_days,
+                                                       barSizeSetting=interval, whatToShow='MIDPOINT', useRTH=False,
+                                                       keepUpToDate=False))[['date', 'close']])
+        df.columns = ['date', f"{contract.symbol}_{contract.right}_close"]
+        df.set_index('date', inplace=True)
+        return df
 
 
 # =============================================================================
@@ -547,7 +555,7 @@ if __name__ == '__main__':
                     currency='USD')
         ib.qualifyContracts(ES)
         endDateTime = ''
-        No_days = '250 D'
+        No_days = '10 D'
         interval = '1 min'
         data_raw = res.options(res.options(res.ES(), res.option_history(res.get_contract('C', 2000))) \
                                , res.option_history(
